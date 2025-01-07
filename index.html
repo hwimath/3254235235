@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>덧셈 뺄셈 혼합 문장제</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #f0f8ff;
+            text-align: center;
+        }
+        #gameContainer {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        #title {
+            font-size: 48px;
+            margin-top: 50px;
+            color: #2e8b57;
+        }
+        #nameInputContainer, #difficultySelection, #questionContainer, #gameOverContainer {
+            margin-top: 30px;
+        }
+        .energyBar {
+            width: 100%;
+            background-color: #ddd;
+            height: 30px;
+            position: relative;
+            margin-top: 20px;
+        }
+        .energy {
+            background-color: #76c7c0;
+            height: 100%;
+            width: 100%;
+            position: absolute;
+            left: 0;
+            top: 0;
+        }
+        .optionButton {
+            display: block;
+            margin: 15px auto;
+            padding: 15px 30px;
+            font-size: 18px;
+            background-color: #ffffff;
+            border: 2px solid #2e8b57;
+            cursor: pointer;
+            width: 60%;
+            border-radius: 5px;
+        }
+        .optionButton:hover {
+            background-color: #e0ffe0;
+        }
+        #score, #lives, #totalTime {
+            font-size: 24px;
+            margin-top: 20px;
+        }
+        #popup {
+            display: none;
+            position: fixed;
+            background-color: rgba(0,0,0,0.5);
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            justify-content: center;
+            align-items: center;
+        }
+        #popupContent {
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        #popupContent button {
+            margin-top: 20px;
+            padding: 10px 20px;
+            font-size: 18px;
+        }
+        #response {
+            margin-top: 30px;
+            font-size: 16px;
+            white-space: pre-wrap; /* 응답 JSON을 줄 바꿈 형태로 보여주기 위함 */
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <!-- 게임 제목 -->
+        <div id="title">덧셈 뺄셈 혼합 문장제</div>
+
+        <!-- (1) 이름 입력 화면 -->
+        <div id="nameInputContainer">
+            <h2>이름을 입력하세요</h2>
+            <input type="text" id="userName" placeholder="예) 홍길동" />
+            <button class="optionButton" onclick="enterName()">이름 등록</button>
+        </div>
+
+        <!-- (2) 난이도 선택 화면 -->
+        <div id="difficultySelection" style="display:none;">
+            <h2>난이도를 선택하세요</h2>
+            <button class="optionButton" onclick="startGame('최상')">최상</button>
+            <button class="optionButton" onclick="startGame('상')">상</button>
+            <button class="optionButton" onclick="startGame('중')">중</button>
+            <button class="optionButton" onclick="startGame('하')">하</button>
+        </div>
+
+        <!-- (3) 문제 풀이 화면 -->
+        <div id="questionContainer" style="display:none;">
+            <div id="energyBar" class="energyBar">
+                <div id="energy" class="energy"></div>
+            </div>
+            <div id="question" style="font-size:24px; margin-top:20px;"></div>
+            <div id="options"></div>
+            <div id="feedback" style="font-size:20px; margin-top:20px; color:red;"></div>
+            <div id="score">점수: 0</div>
+            <div id="lives">남은 기회: 3</div>
+            <div id="totalTime">총 게임 시간: 0초</div>
+        </div>
+
+        <!-- (4) 게임 오버 화면 -->
+        <div id="gameOverContainer" style="display:none;">
+            <h2 id="gameOverMessage"></h2>
+            <!-- 다시 시작 버튼 -->
+            <button class="optionButton" onclick="restartGame()">다시 시작</button>
+            <!-- 점수 전송 버튼 -->
+            <button class="optionButton" id="sendScoreButton" style="display:none;" onclick="sendScore()">점수 전송</button>
+            <!-- 서버 응답 메시지 표시 -->
+            <div id="response"></div>
+        </div>
+    </div>
+
+    <!-- (팝업: 랜덤 보상) -->
+    <div id="popup">
+        <div id="popupContent">
+            <h2 id="popupMessage"></h2>
+            <button onclick="closePopup()">닫기</button>
+        </div>
+    </div>
+
+    <script>
+        /********************
+         * 원본 문제 전체 목록
+         ********************/
+        let questions = [
+            // 유형 1: 간단한 덧셈
+            {
+                type: '덧셈',
+                question: '운동회에서 은지는 245개의 메달을 땄고, 지훈이는 318개의 메달을 땄습니다. 누가 메달을 몇 개 더 많이 땄는지 구해 보세요.',
+                answer: '지훈이, 73개',
+                options: ['지훈이, 73개', '은지, 73개', '지훈이, 72개', '은지, 72개']
+            },
+            {
+                type: '덧셈',
+                question: '미술 시간에 수민이는 그림을 365장 그렸고, 하은이는 429장을 그렸습니다. 누가 그림을 몇 장 더 많이 그렸는지 구해 보세요.',
+                answer: '하은이, 64장',
+                options: ['하은이, 64장', '수민이, 64장', '하은이, 63장', '수민이, 63장']
+            },
+            {
+                type: '덧셈',
+                question: '할머니 댁에서 준호는 귤을 287개 먹었고, 수아는 354개를 먹었습니다. 누가 귤을 몇 개 더 많이 먹었는지 구해 보세요.',
+                answer: '수아, 67개',
+                options: ['수아, 67개', '준호, 67개', '수아, 66개', '준호, 66개']
+            },
+            {
+                type: '덧셈',
+                question: '책을 지훈이는 514권 읽었고, 민수는 489권 읽었습니다. 누가 책을 몇 권 더 많이 읽었는지 구해 보세요.',
+                answer: '지훈이, 25권',
+                options: ['지훈이, 25권', '민수, 25권', '지훈이, 24권', '민수, 24권']
+            },
+            {
+                type: '덧셈',
+                question: '동물원에서 윤서는 동물을 628마리 보고, 현준이는 675마리를 보았습니다. 누가 동물을 몇 마리 더 많이 보았는지 구해 보세요.',
+                answer: '현준이, 47마리',
+                options: ['현준이, 47마리', '윤서, 47마리', '현준이, 46마리', '윤서, 46마리']
+            },
+            {
+                type: '덧셈',
+                question: '산책하면서 은우는 꽃을 326송이 발견했고, 수진이는 439송이를 발견했습니다. 누가 꽃을 몇 송이 더 많이 발견했는지 구해 보세요.',
+                answer: '수진이, 113송이',
+                options: ['수진이, 113송이', '은우, 113송이', '수진이, 112송이', '은우, 112송이']
+            },
+            {
+                type: '덧셈',
+                question: '게임에서 지민이는 점수 781점을 얻었고, 연수는 888점을 얻었습니다. 누가 점수를 몇 점 더 많이 얻었는지 구해 보세요.',
+                answer: '연수, 107점',
+                options: ['연수, 107점', '지민이, 107점', '연수, 106점', '지민이, 106점']
+            },
+            {
+                type: '덧셈',
+                question: '친구들과 연을 날렸을 때, 민재는 연을 555개 날렸고, 서윤이는 600개 날렸습니다. 누가 연을 몇 개 더 많이 날렸는지 구해 보세요.',
+                answer: '서윤이, 45개',
+                options: ['서윤이, 45개', '민재, 45개', '서윤이, 44개', '민재, 44개']
+            },
+
+            // 유형 2: 간단한 뺄셈
+            {
+                type: '뺄셈',
+                question: '공원에 아이들이 764명 있었습니다. 그 중 327명이 집에 가고, 215명이 새로 왔습니다. 지금 공원에 아이들은 몇 명일까요?',
+                answer: '652명',
+                options: ['652명', '653명', '654명', '655명']
+            },
+            {
+                type: '뺄셈',
+                question: '책상 위에 연필이 878자루 있었습니다. 그 중 334자루를 사용하고, 222자루를 새로 가져왔습니다. 지금 연필은 몇 자루일까요?',
+                answer: '766자루',
+                options: ['766자루', '765자루', '764자루', '763자루']
+            },
+            {
+                type: '뺄셈',
+                question: '바구니에 사탕이 985개 있었습니다. 429개를 먹고, 318개를 더 넣었습니다. 바구니에는 사탕이 몇 개 있을까요?',
+                answer: '874개',
+                options: ['874개', '873개', '872개', '871개']
+            },
+            {
+                type: '뺄셈',
+                question: '교실에 학생이 990명 있었습니다. 438명이 체육관에 가고, 212명이 교실로 돌아왔습니다. 지금 교실에는 학생이 몇 명일까요?',
+                answer: '764명',
+                options: ['764명', '763명', '762명', '761명']
+            },
+            {
+                type: '뺄셈',
+                question: '동물원에 원숭이 547마리가 있었습니다. 219마리가 숲으로 가고, 325마리가 새로 왔습니다. 지금 원숭이는 몇 마리일까요?',
+                answer: '653마리',
+                options: ['653마리', '652마리', '651마리', '650마리']
+            },
+            {
+                type: '뺄셈',
+                question: '가게에 빵이 868개 있었습니다. 424개를 팔고, 216개를 더 만들었습니다. 지금 빵은 몇 개일까요?',
+                answer: '660개',
+                options: ['660개', '659개', '658개', '657개']
+            },
+            {
+                type: '뺄셈',
+                question: '마당에 새가 773마리 있었습니다. 335마리가 날아가고, 328마리가 날아왔습니다. 지금 새는 몇 마리일까요?',
+                answer: '766마리',
+                options: ['766마리', '765마리', '764마리', '763마리']
+            },
+            {
+                type: '뺄셈',
+                question: '아빠가 859개의 나무를 심었습니다. 그 중 422개가 말라 죽고, 318개를 새로 심었습니다. 지금 나무는 몇 그루일까요?',
+                answer: '755그루',
+                options: ['755그루', '754그루', '753그루', '752그루']
+            },
+
+            // 유형 3: 덧셈 응용
+            {
+                type: '덧셈응용',
+                question: '과자 438개를 먹었더니 329개가 남았습니다. 처음에 있던 과자는 모두 몇 개인가요?',
+                answer: '767개',
+                options: ['767개', '766개', '765개', '764개']
+            },
+            {
+                type: '덧셈응용',
+                question: '사탕 754개 중에서 몇 개의 사탕을 먹었습니다. 남은 사탕이 537개일 때 먹은 사탕의 수를 구하세요.',
+                answer: '217개',
+                options: ['217개', '216개', '215개', '214개']
+            },
+            {
+                type: '덧셈응용',
+                question: '연필 868자루 중에서 몇 자루를 잃어버렸습니다. 남은 연필이 755자루일 때 잃어버린 연필의 수를 구하세요.',
+                answer: '113자루',
+                options: ['113자루', '112자루', '111자루', '110자루']
+            },
+            {
+                type: '덧셈응용',
+                question: '쿠키 972개 중에서 몇 개를 친구들에게 주었습니다. 남은 쿠키가 748개일 때 준 쿠키의 수를 구하세요.',
+                answer: '224개',
+                options: ['224개', '223개', '222개', '221개']
+            },
+            {
+                type: '덧셈응용',
+                question: '색종이 657장 중에서 몇 장을 사용했습니다. 남은 색종이가 439장일 때 사용한 색종이의 수를 구하세요.',
+                answer: '218장',
+                options: ['218장', '217장', '216장', '215장']
+            },
+            {
+                type: '덧셈응용',
+                question: '나뭇잎 546장 중에서 몇 장이 바람에 날아갔습니다. 남은 나뭇잎이 331장일 때 날아간 나뭇잎의 수를 구하세요.',
+                answer: '215장',
+                options: ['215장', '214장', '213장', '212장']
+            },
+            {
+                type: '덧셈응용',
+                question: '스티커 763개 중에서 몇 개를 앨범에 붙였습니다. 남은 스티커가 545개일 때 붙인 스티커의 수를 구하세요.',
+                answer: '218개',
+                options: ['218개', '217개', '216개', '215개']
+            },
+            {
+                type: '덧셈응용',
+                question: '장난감 850개 중에서 몇 개를 동생에게 주었습니다. 남은 장난감이 633개일 때 준 장난감의 수를 구하세요.',
+                answer: '217개',
+                options: ['217개', '216개', '215개', '214개']
+            },
+
+            // 유형 4: 덧셈과 뺄셈 혼합
+            {
+                type: '혼합',
+                question: '마트에 복숭아가 224개, 토마토가 337개 있습니다. 그 중에서 299개가 썩어서 버렸습니다. 남은 복숭아와 토마토는 몇 개인가요?',
+                answer: '262개',
+                options: ['262개', '261개', '260개', '259개']
+            },
+            {
+                type: '혼합',
+                question: '가게에 사과가 558개, 배가 442개 있습니다. 그 중에서 366개를 팔았습니다. 남은 사과와 배는 몇 개인가요?',
+                answer: '634개',
+                options: ['634개', '633개', '632개', '631개']
+            },
+            {
+                type: '혼합',
+                question: '서점에 책이 439권, 잡지가 328권 있습니다. 그 중 333권을 팔았습니다. 남은 책과 잡지는 몇 권인가요?',
+                answer: '434권',
+                options: ['434권', '433권', '432권', '431권']
+            },
+            {
+                type: '혼합',
+                question: '어항에 금붕어가 218마리, 구피가 326마리 있습니다. 그 중 222마리가 죽었습니다. 남은 물고기는 몇 마리인가요?',
+                answer: '322마리',
+                options: ['322마리', '321마리', '320마리', '319마리']
+            },
+            {
+                type: '혼합',
+                question: '수영장에 어린이가 442명, 어른이 335명 있습니다. 그 중 448명이 나갔습니다. 지금 수영장에는 몇 명이 남아있나요?',
+                answer: '329명',
+                options: ['329명', '328명', '327명', '326명']
+            },
+            {
+                type: '혼합',
+                question: '공원에 나무가 553그루, 꽃이 447송이 있습니다. 그 중 388그루가 베어졌습니다. 남은 나무와 꽃은 몇 그루와 몇 송이인가요?',
+                answer: '612개',
+                options: ['612개', '611개', '610개', '609개']
+            },
+            {
+                type: '혼합',
+                question: '장난감 가게에 자동차가 444개, 로봇이 336개 있습니다. 그 중 550개를 팔았습니다. 남은 장난감은 몇 개인가요?',
+                answer: '230개',
+                options: ['230개', '229개', '228개', '227개']
+            },
+            {
+                type: '혼합',
+                question: '냉장고에 우유가 225팩, 주스가 339팩 있습니다. 그 중 440팩을 마셨습니다. 남은 우유와 주스는 몇 팩인가요?',
+                answer: '124팩',
+                options: ['124팩', '123팩', '122팩', '121팩']
+            },
+
+            // 유형 5: 돈 문제
+            {
+                type: '돈문제',
+                question: '영수는 230원을 갖고 있고, 나는 그것보다 50원이 더 많습니다. 민철이는 나보다 100원이 더 많다면 민철이는 얼마를 갖고 있습니까?',
+                answer: '380원',
+                options: ['380원', '370원', '360원', '350원']
+            },
+            {
+                type: '돈문제',
+                question: '철수는 450원을 갖고 있고, 영희는 철수보다 150원이 더 많습니다. 민수는 영희보다 200원이 더 많다면 민수는 얼마를 갖고 있습니까?',
+                answer: '800원',
+                options: ['800원', '790원', '780원', '770원']
+            },
+            {
+                type: '돈문제',
+                question: '지훈이는 320원을 갖고 있고, 나는 지훈이보다 80원이 더 많습니다. 수진이는 나보다 90원이 더 많다면 수진이는 얼마를 갖고 있습니까?',
+                answer: '490원',
+                options: ['490원', '480원', '470원', '460원']
+            },
+            {
+                type: '돈문제',
+                question: '민호는 550원을 갖고 있고, 나는 민호보다 120원이 더 많습니다. 서현이는 나보다 130원이 더 많다면 서현이는 얼마를 갖고 있습니까?',
+                answer: '800원',
+                options: ['800원', '790원', '780원', '770원']
+            },
+            {
+                type: '돈문제',
+                question: '유진이는 610원을 갖고 있고, 나는 유진이보다 90원이 더 많습니다. 지수는 나보다 110원이 더 많다면 지수는 얼마를 갖고 있습니까?',
+                answer: '810원',
+                options: ['810원', '800원', '790원', '780원']
+            },
+            {
+                type: '돈문제',
+                question: '성민이는 470원을 갖고 있고, 나는 성민이보다 130원이 더 많습니다. 은지는 나보다 140원이 더 많다면 은지는 얼마를 갖고 있습니까?',
+                answer: '740원',
+                options: ['740원', '730원', '720원', '710원']
+            },
+            {
+                type: '돈문제',
+                question: '현우는 390원을 갖고 있고, 나는 현우보다 110원이 더 많습니다. 수현이는 나보다 120원이 더 많다면 수현이는 얼마를 갖고 있습니까?',
+                answer: '620원',
+                options: ['620원', '610원', '600원', '590원']
+            },
+            {
+                type: '돈문제',
+                question: '민재는 280원을 갖고 있고, 나는 민재보다 220원이 더 많습니다. 서연이는 나보다 150원이 더 많다면 서연이는 얼마를 갖고 있습니까?',
+                answer: '650원',
+                options: ['650원', '640원', '630원', '620원']
+            },
+
+            // 유형 6: 돈 문제 (세 사람의 금액 합)
+            {
+                type: '돈문제',
+                question: '영수는 230원을 갖고 있고, 나는 그것보다 50원이 더 많습니다. 민철이는 나보다 100원이 더 많다면 세 사람이 갖고 있는 금액의 합은 얼마입니까?',
+                answer: '890원',
+                options: ['890원', '880원', '870원', '860원']
+            },
+            {
+                type: '돈문제',
+                question: '철수는 450원을 갖고 있고, 영희는 철수보다 150원이 더 많습니다. 민수는 영희보다 200원이 더 많다면 세 사람이 갖고 있는 금액의 합은 얼마입니까?',
+                answer: '1850원',
+                options: ['1850원', '1840원', '1830원', '1820원']
+            },
+            {
+                type: '돈문제',
+                question: '지훈이는 320원을 갖고 있고, 나는 지훈이보다 80원이 더 많습니다. 수진이는 나보다 90원이 더 많다면 세 사람이 갖고 있는 금액의 합은 얼마입니까?',
+                answer: '1210원',
+                options: ['1210원', '1200원', '1190원', '1180원']
+            },
+            {
+                type: '돈문제',
+                question: '민호는 550원을 갖고 있고, 나는 민호보다 120원이 더 많습니다. 서현이는 나보다 130원이 더 많다면 세 사람이 갖고 있는 금액의 합은 얼마입니까?',
+                answer: '2020원',
+                options: ['2020원', '2010원', '2000원', '1990원']
+            },
+            {
+                type: '돈문제',
+                question: '유진이는 610원을 갖고 있고, 나는 유진이보다 90원이 더 많습니다. 지수는 나보다 110원이 더 많다면 세 사람이 갖고 있는 금액의 합은 얼마입니까?',
+                answer: '2120원',
+                options: ['2120원', '2110원', '2100원', '2090원']
+            },
+            {
+                type: '돈문제',
+                question: '성민이는 470원을 갖고 있고, 나는 성민이보다 130원이 더 많습니다. 은지는 나보다 140원이 더 많다면 세 사람이 갖고 있는 금액의 합은 얼마입니까?',
+                answer: '1810원',
+                options: ['1810원', '1800원', '1790원', '1780원']
+            },
+            {
+                type: '돈문제',
+                question: '현우는 390원을 갖고 있고, 나는 현우보다 110원이 더 많습니다. 수현이는 나보다 120원이 더 많다면 세 사람이 갖고 있는 금액의 합은 얼마입니까?',
+                answer: '1510원',
+                options: ['1510원', '1500원', '1490원', '1480원']
+            },
+            {
+                type: '돈문제',
+                question: '민재는 280원을 갖고 있고, 나는 민재보다 220원이 더 많습니다. 서연이는 나보다 150원이 더 많다면 세 사람이 갖고 있는 금액의 합은 얼마입니까?',
+                answer: '1430원',
+                options: ['1430원', '1420원', '1410원', '1400원']
+            },
+
+            // 유형 7: 덧셈과 뺄셈 (혼합)
+            {
+                type: '혼합',
+                question: '빨간색 구슬이 334개, 파란색 구슬이 428개 있습니다. 노란색 구슬은 빨간색과 파란색 구슬을 더한 것보다 150개 더 적다면 노란색 구슬은 몇 개인가요?',
+                answer: '612개',
+                options: ['612개', '611개', '610개', '609개']
+            },
+            {
+                type: '혼합',
+                question: '사과가 452개, 배가 347개 있습니다. 복숭아는 사과와 배를 더한 것보다 200개 더 적다면 복숭아는 몇 개인가요?',
+                answer: '599개',
+                options: ['599개', '598개', '597개', '596개']
+            },
+            {
+                type: '혼합',
+                question: '연필이 325자루, 펜이 439자루 있습니다. 지우개는 연필과 펜을 더한 것보다 180개 더 적다면 지우개는 몇 개인가요?',
+                answer: '584개',
+                options: ['584개', '583개', '582개', '581개']
+            },
+            {
+                type: '혼합',
+                question: '개구리가 427마리, 거북이가 538마리 있습니다. 물고기는 개구리와 거북이를 더한 것보다 250마리 더 적다면 물고기는 몇 마리인가요?',
+                answer: '715마리',
+                options: ['715마리', '714마리', '713마리', '712마리']
+            },
+            {
+                type: '혼합',
+                question: '장난감 자동차가 536개, 로봇이 645개 있습니다. 인형은 자동차와 로봇을 더한 것보다 300개 더 적다면 인형은 몇 개인가요?',
+                answer: '881개',
+                options: ['881개', '880개', '879개', '878개']
+            },
+            {
+                type: '혼합',
+                question: '초콜릿이 629개, 사탕이 757개 있습니다. 쿠키는 초콜릿과 사탕을 더한 것보다 350개 더 적다면 쿠키는 몇 개인가요?',
+                answer: '1036개',
+                options: ['1036개', '1035개', '1034개', '1033개']
+            },
+            {
+                type: '혼합',
+                question: '모자 648개, 스카프 736개가 있습니다. 장갑은 모자와 스카프를 더한 것보다 400개 더 적다면 장갑은 몇 개인가요?',
+                answer: '984개',
+                options: ['984개', '983개', '982개', '981개']
+            },
+            {
+                type: '혼합',
+                question: '책이 761권, 노트가 424권 있습니다. 연필은 책과 노트를 더한 것보다 300개 더 적다면 연필은 몇 개인가요?',
+                answer: '885개',
+                options: ['885개', '884개', '883개', '882개']
+            },
+
+            // 유형 8: 덧셈 응용 (추가)
+            {
+                type: '덧셈응용',
+                question: '풍선 765개 중에서 몇 개의 풍선이 터졌습니다. 남은 풍선이 547개일 때 터진 풍선의 수를 구하세요.',
+                answer: '218개',
+                options: ['218개', '217개', '216개', '215개']
+            },
+            {
+                type: '덧셈응용',
+                question: '물감 858통 중에서 몇 통을 사용했습니다. 남은 물감이 639통일 때 사용한 물감의 수를 구하세요.',
+                answer: '219통',
+                options: ['219통', '218통', '217통', '216통']
+            },
+            {
+                type: '덧셈응용',
+                question: '스티커 972개 중에서 몇 개를 앨범에 붙였습니다. 남은 스티커가 753개일 때 붙인 스티커의 수를 구하세요.',
+                answer: '219개',
+                options: ['219개', '218개', '217개', '216개']
+            },
+            {
+                type: '덧셈응용',
+                question: '장난감 985개 중에서 몇 개를 동생에게 주었습니다. 남은 장난감이 767개일 때 준 장난감의 수를 구하세요.',
+                answer: '218개',
+                options: ['218개', '217개', '216개', '215개']
+            },
+            {
+                type: '덧셈응용',
+                question: '사탕 990개 중에서 몇 개의 사탕을 먹었습니다. 남은 사탕이 772개일 때 먹은 사탕의 수를 구하세요.',
+                answer: '218개',
+                options: ['218개', '217개', '216개', '215개']
+            },
+            {
+                type: '덧셈응용',
+                question: '연필 749자루 중에서 몇 자루를 잃어버렸습니다. 남은 연필이 531자루일 때 잃어버린 연필의 수를 구하세요.',
+                answer: '218자루',
+                options: ['218자루', '217자루', '216자루', '215자루']
+            },
+            {
+                type: '덧셈응용',
+                question: '쿠키 866개 중에서 몇 개를 친구들에게 주었습니다. 남은 쿠키가 649개일 때 준 쿠키의 수를 구하세요.',
+                answer: '217개',
+                options: ['217개', '216개', '215개', '214개']
+            },
+            {
+                type: '덧셈응용',
+                question: '색종이 983장 중에서 몇 장을 사용했습니다. 남은 색종이가 765장일 때 사용한 색종이의 수를 구하세요.',
+                answer: '218장',
+                options: ['218장', '217장', '216장', '215장']
+            }
+        ];
+
+        // 전역 변수들
+        let currentQuestion = {};
+        let score = 0;
+        let lives = 3;
+        let difficulty = '';
+        let timeLimit = 0;
+        let energyInterval;
+        let totalTime = 0;
+        let totalTimeInterval;
+        let energyPercentage = 100;
+        let decreaseRate = 1; 
+        let answeredQuestions = [];
+        let scoreIncrement = 10; // 난이도별 점수 증가폭
+        let userName = ""; // 플레이어 이름
+
+        // (1) 이름 입력 후 난이도 선택 화면으로 이동
+        function enterName() {
+            userName = document.getElementById('userName').value.trim();
+            if (!userName) {
+                alert("이름을 입력해주세요!");
+                return;
+            }
+            // 이름 입력 완료 -> 이름 입력 창 숨기기, 난이도 선택 화면 보여주기
+            document.getElementById('nameInputContainer').style.display = 'none';
+            document.getElementById('difficultySelection').style.display = 'block';
+        }
+
+        // (2) 난이도 선택 후 게임 시작
+        function startGame(selectedDifficulty) {
+            difficulty = selectedDifficulty;
+            switch(difficulty) {
+                case '최상':
+                    timeLimit = 20000; // 20초
+                    scoreIncrement = 20;
+                    break;
+                case '상':
+                    timeLimit = 30000; // 30초
+                    scoreIncrement = 15;
+                    break;
+                case '중':
+                    timeLimit = 40000; // 40초
+                    scoreIncrement = 13;
+                    break;
+                case '하':
+                    timeLimit = Infinity; // 시간 제한 없음
+                    scoreIncrement = 10;
+                    break;
+            }
+            document.getElementById('difficultySelection').style.display = 'none';
+            document.getElementById('questionContainer').style.display = 'block';
+
+            // 총 게임 시간 측정
+            totalTimeInterval = setInterval(() => {
+                totalTime++;
+                document.getElementById('totalTime').innerText = '총 게임 시간: ' + totalTime + '초';
+            }, 1000);
+
+            nextQuestion();
+        }
+
+        // 다음 문제 불러오기
+        function nextQuestion() {
+            if (lives <= 0) {
+                gameOver();
+                return;
+            }
+
+            // 시간바(에너지) 초기화
+            energyPercentage = 100;
+            if (difficulty !== '하') {
+                clearInterval(energyInterval);
+                energyInterval = setInterval(() => {
+                    energyPercentage -= (100 / (timeLimit / decreaseRate / 100));
+                    if (energyPercentage <= 0) {
+                        energyPercentage = 0;
+                        clearInterval(energyInterval);
+                        lives--;
+                        document.getElementById('lives').innerText = '남은 기회: ' + lives;
+                        document.getElementById('feedback').innerText = '시간 초과! 다음 문제로 넘어갑니다.';
+                        setTimeout(() => {
+                            document.getElementById('feedback').innerText = '';
+                            nextQuestion();
+                        }, 2000);
+                        return;
+                    }
+                    document.getElementById('energy').style.width = energyPercentage + '%';
+                }, 100);
+            } else {
+                document.getElementById('energyBar').style.display = 'none';
+            }
+
+            // 문제 랜덤 추출
+            if (answeredQuestions.length === questions.length) {
+                answeredQuestions = [];
+            }
+            do {
+                currentQuestion = questions[Math.floor(Math.random() * questions.length)];
+            } while (answeredQuestions.includes(currentQuestion));
+
+            answeredQuestions.push(currentQuestion);
+
+            // 문제 표시
+            document.getElementById('question').innerText = currentQuestion.question;
+
+            // 선택지 섞기
+            let options = [...currentQuestion.options];
+            options = [...new Set(options)]; // 혹시 있을 중복 제거
+            options.sort(() => Math.random() - 0.5);
+
+            // 선택지 생성
+            let optionsHtml = '';
+            options.forEach(option => {
+                optionsHtml += `<button class="optionButton" onclick="checkAnswer('${option}')">${option}</button>`;
+            });
+            document.getElementById('options').innerHTML = optionsHtml;
+        }
+
+        // 정답 체크
+        function checkAnswer(selectedOption) {
+            clearInterval(energyInterval);
+            if (selectedOption === currentQuestion.answer) {
+                score += scoreIncrement;
+                document.getElementById('score').innerText = '점수: ' + score;
+                document.getElementById('feedback').innerText = '정답입니다!';
+                randomPopup();
+            } else {
+                lives--;
+                document.getElementById('lives').innerText = '남은 기회: ' + lives;
+                document.getElementById('feedback').innerText = `오답입니다. 정답은 "${currentQuestion.answer}" 입니다.`;
+            }
+            setTimeout(() => {
+                document.getElementById('feedback').innerText = '';
+                nextQuestion();
+            }, 2000);
+        }
+
+        // 게임 종료 처리
+        function gameOver() {
+            clearInterval(totalTimeInterval);
+            document.getElementById('questionContainer').style.display = 'none';
+            document.getElementById('gameOverContainer').style.display = 'block';
+            document.getElementById('gameOverMessage').innerText = '게임 종료! 최종 점수: ' + score + '점';
+            // 점수 전송 버튼 노출
+            document.getElementById('sendScoreButton').style.display = 'block';
+        }
+
+        // 다시 시작
+        function restartGame() {
+            score = 0;
+            lives = 3;
+            totalTime = 0;
+            answeredQuestions = [];
+            document.getElementById('score').innerText = '점수: ' + score;
+            document.getElementById('lives').innerText = '남은 기회: ' + lives;
+            document.getElementById('totalTime').innerText = '총 게임 시간: ' + totalTime + '초';
+            document.getElementById('gameOverContainer').style.display = 'none';
+
+            // 초기 화면(이름 입력)으로 되돌아갑니다.
+            document.getElementById('energyBar').style.display = 'block';
+            document.getElementById('nameInputContainer').style.display = 'block';
+        }
+
+        // 팝업 닫기
+        function closePopup() {
+            document.getElementById('popup').style.display = 'none';
+        }
+
+        // 일정 확률로 랜덤 팝업
+        function randomPopup() {
+            let randomNumber = Math.random();
+            if (randomNumber < 0.0001) { // 1/10000 확률
+                showPopup('축하합니다! 5000원 상품권에 당첨되셨습니다!');
+            } else if (randomNumber < 0.001) { // 1/1000 확률
+                showPopup('축하합니다! 3000원 상품권에 당첨되셨습니다!');
+            } else if (randomNumber < 0.002) { // 1/500 확률
+                showPopup('축하합니다! 1회 면제권을 획득하셨습니다!');
+                lives++;
+                document.getElementById('lives').innerText = '남은 기회: ' + lives;
+            }
+        }
+
+        // 팝업 보이기
+        function showPopup(message) {
+            document.getElementById('popupMessage').innerText = message;
+            document.getElementById('popup').style.display = 'flex';
+        }
+
+        // (4) "점수 전송" 버튼 눌렀을 때 서버로 데이터 전송
+        function sendScore() {
+            // userName, score, totalTime을 서버로 전송
+            saveData("덧셈 뺄셈 혼합 문장제", userName, score, totalTime);
+        }
+
+        // (5) 서버로 데이터 전송 함수
+        async function saveData(game, name, score, elapsedTime) {
+            const FUNCTION_URL = "https://us-central1-record-f420d.cloudfunctions.net/report";
+
+            const requestData = {
+                game,
+                name,
+                score: parseInt(score, 10),
+                elapsedTime: parseInt(elapsedTime, 10)
+            };
+
+            try {
+                const response = await fetch(FUNCTION_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestData)
+                });
+
+                const responseData = await response.json();
+
+                if (response.ok) {
+                    document.getElementById('response').innerText =
+                        '성공: ' + JSON.stringify(responseData, null, 2);
+                } else {
+                    document.getElementById('response').innerText =
+                        '오류: ' + JSON.stringify(responseData, null, 2);
+                }
+            } catch (error) {
+                console.error('요청 실패:', error);
+                document.getElementById('response').innerText =
+                    '네트워크 오류: ' + error.message;
+            }
+        }
+    </script>
+</body>
+</html>
